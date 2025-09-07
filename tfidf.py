@@ -1,79 +1,40 @@
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-from sentence_transformers import SentenceTransformer, util
-import numpy as np
-
-
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-
-
-def get_all_questions_from_db(db_connection):
-
-    return [
-        {
-            "id": 1,
-            "question_text": "Why is my neural network not converging?",
-            "answer_text": "Check your learning rate. If it's too high, the loss might oscillate or diverge.",
-            "embedding": embedding_model.encode("Why is my neural network not converging?")
-        },
-        {
-            "id": 2,
-            "question_text": "How do I fix a 'CORS policy' error in my React app?",
-            "answer_text": "You need to configure your backend server to include the correct 'Access-Control-Allow-Origin' header.",
-            "embedding": embedding_model.encode("How do I fix a 'CORS policy' error in my React app?")
-        },
-        {
-            "id": 3,
-            "question_text": "My model's loss is stuck. What should I do?",
-            "answer_text": "A stagnant loss could mean your model is too simple or the learning rate is too low. Try increasing model complexity or the learning rate.",
-            "embedding": embedding_model.encode("My model's loss is stuck. What should I do?")
-        }
-    ]
+#testing dataset
+dataset = [
+    {"user": "Alice", "question": "Why is my neural network not converging?", "domain": "AI/ML",
+     "answer": "Check your learning rate, initialization, and data normalization."},
+    {"user": "Bob", "question": "How to deploy a React app with Flask backend?", "domain": "Web",
+     "answer": "You can serve the React build folder as static files in Flask or use a reverse proxy like Nginx."},
+    {"user": "Charlie", "question": "What is backpropagation in neural networks?", "domain": "AI/ML",
+     "answer": "Backpropagation is the process of computing gradients to update weights during training."},
+    {"user": "Dave", "question": "How can I connect Arduino to a motor driver?", "domain": "Electronics",
+     "answer": "Use the motor driver inputs connected to Arduino PWM pins and power supply properly."},
+    {"user": "Eve", "question": "How does dropout prevent overfitting in neural networks?", "domain": "AI/ML",
+     "answer": "Dropout randomly drops units during training, preventing co-adaptation and improving generalization."},
+    {"user": "Frank", "question": "How do I style a button in CSS?", "domain": "Web",
+     "answer": "You can use the CSS :hover pseudo-class and properties like background-color, border, and padding."},
+    {"user": "Grace", "question": "What is gradient descent?", "domain": "AI/ML",
+     "answer": "Gradient descent is an optimization algorithm that updates parameters to minimize loss."},
+    {"user": "Heidi", "question": "How to handle user authentication in a Django app?", "domain": "Web",
+     "answer": "Use Django’s built-in authentication system with User model and sessions."},
+]
 
 
-def find_similar_qa_for_rag(new_question: str, db_connection, top_k=3):
-    """
-    Finds similar question-answer pairs from the database to use as context for RAG.
-    """
+df = pd.DataFrame(dataset)
+vectorizer = TfidfVectorizer(stop_words='english')
+tfidf_matrix = vectorizer.fit_transform(df['question'])
 
-    all_questions = get_all_questions_from_db(db_connection)
-    existing_embeddings = np.array([q["embedding"] for q in all_questions])
-
-
-    new_question_embedding = embedding_model.encode(new_question)
-
-
-    cosine_scores = util.cos_sim(new_question_embedding, existing_embeddings)[0]
+def get_similar_questions(new_question, top_k=3):
+    new_vec = vectorizer.transform([new_question])
+    similarities = cosine_similarity(new_vec, tfidf_matrix).flatten()
+    top_indices = similarities.argsort()[::-1][:top_k]
+    results = df.iloc[top_indices].copy()
+    results['similarity'] = similarities[top_indices]
+    return results
 
 
-    top_results_indices = np.argpartition(cosine_scores, -top_k)[-top_k:]
-    
-
-    similar_qa_pairs = []
-    for idx in top_results_indices:
-        if cosine_scores[idx] > 0.6: 
-            similar_qa_pairs.append({
-                "question": all_questions[idx]["question_text"],
-                "answer": all_questions[idx]["answer_text"],
-                "score": cosine_scores[idx].item()
-            })
-
-
-    similar_qa_pairs.sort(key=lambda x: x["score"], reverse=True)
-    
-    return similar_qa_pairs
-
-new_student_question = "My neural network loss is not decreasing. What is wrong?"
-
-
-db_conn = "your_database_connection_object" 
-
-
-context_for_rag = find_similar_qa_for_rag(new_student_question, db_conn)
-
-
-print(f"New Question: {new_student_question}\n")
-print("--- Found Similar Questions for RAG Context ---")
-for item in context_for_rag:
-    print(f"Similarity Score: {item['score']:.2f}")
-    print(f"Similar Question: {item['question']}")
-    print(f"Similar Answer: {item['answer']}\n")
+query = "Why is my CNN not learning properly?"
+print(get_similar_questions(query, top_k=3))
